@@ -48,6 +48,18 @@
 #define QUEUE_BUFFER_SIZE		 	2048
 #endif
 
+#define ZALLOC(x) safe_alloc(__LINE__, (x))
+static int tot = 0;
+static void * ICACHE_FLASH_ATTR safe_alloc(int l, int sz)
+{
+	void *ret = (void *)os_zalloc(sz);
+	if (!ret) {
+		os_printf("MQTT memory allocation failure for %d bytes after %d at ln:%d\n", sz, tot, l);
+	} else
+		tot += sz;
+	return ret;
+}
+
 unsigned char *default_certificate;
 unsigned int default_certificate_len = 0;
 unsigned char *default_private_key;
@@ -502,7 +514,7 @@ MQTT_InitConnection(MQTT_Client *mqttClient, uint8_t* host, uint32 port, uint8_t
 	INFO("MQTT_InitConnection\r\n");
 	os_memset(mqttClient, 0, sizeof(MQTT_Client));
 	temp = os_strlen(host);
-	mqttClient->host = (uint8_t*)os_zalloc(temp + 1);
+	mqttClient->host = (uint8_t*)ZALLOC(temp + 1);
 	os_strcpy(mqttClient->host, host);
 	mqttClient->host[temp] = 0;
 	mqttClient->port = port;
@@ -528,17 +540,17 @@ MQTT_InitClient(MQTT_Client *mqttClient, uint8_t* client_id, uint8_t* client_use
 	os_memset(&mqttClient->connect_info, 0, sizeof(mqtt_connect_info_t));
 
 	temp = os_strlen(client_id);
-	mqttClient->connect_info.client_id = (uint8_t*)os_zalloc(temp + 1);
+	mqttClient->connect_info.client_id = (uint8_t*)ZALLOC(temp + 1);
 	os_strcpy(mqttClient->connect_info.client_id, client_id);
 	mqttClient->connect_info.client_id[temp] = 0;
 
 	temp = os_strlen(client_user);
-	mqttClient->connect_info.username = (uint8_t*)os_zalloc(temp + 1);
+	mqttClient->connect_info.username = (uint8_t*)ZALLOC(temp + 1);
 	os_strcpy(mqttClient->connect_info.username, client_user);
 	mqttClient->connect_info.username[temp] = 0;
 
 	temp = os_strlen(client_pass);
-	mqttClient->connect_info.password = (uint8_t*)os_zalloc(temp + 1);
+	mqttClient->connect_info.password = (uint8_t*)ZALLOC(temp + 1);
 	os_strcpy(mqttClient->connect_info.password, client_pass);
 	mqttClient->connect_info.password[temp] = 0;
 
@@ -546,9 +558,9 @@ MQTT_InitClient(MQTT_Client *mqttClient, uint8_t* client_id, uint8_t* client_use
 	mqttClient->connect_info.keepalive = keepAliveTime;
 	mqttClient->connect_info.clean_session = cleanSession;
 
-	mqttClient->mqtt_state.in_buffer = (uint8_t *)os_zalloc(MQTT_BUF_SIZE);
+	mqttClient->mqtt_state.in_buffer = (uint8_t *)ZALLOC(MQTT_BUF_SIZE);
 	mqttClient->mqtt_state.in_buffer_length = MQTT_BUF_SIZE;
-	mqttClient->mqtt_state.out_buffer =  (uint8_t *)os_zalloc(MQTT_BUF_SIZE);
+	mqttClient->mqtt_state.out_buffer =  (uint8_t *)ZALLOC(MQTT_BUF_SIZE);
 	mqttClient->mqtt_state.out_buffer_length = MQTT_BUF_SIZE;
 	mqttClient->mqtt_state.connect_info = &mqttClient->connect_info;
 
@@ -564,12 +576,12 @@ MQTT_InitLWT(MQTT_Client *mqttClient, uint8_t* will_topic, uint8_t* will_msg, ui
 {
 	uint32_t temp;
 	temp = os_strlen(will_topic);
-	mqttClient->connect_info.will_topic = (uint8_t*)os_zalloc(temp + 1);
+	mqttClient->connect_info.will_topic = (uint8_t*)ZALLOC(temp + 1);
 	os_strcpy(mqttClient->connect_info.will_topic, will_topic);
 	mqttClient->connect_info.will_topic[temp] = 0;
 
 	temp = os_strlen(will_msg);
-	mqttClient->connect_info.will_message = (uint8_t*)os_zalloc(temp + 1);
+	mqttClient->connect_info.will_message = (uint8_t*)ZALLOC(temp + 1);
 	os_strcpy(mqttClient->connect_info.will_message, will_msg);
 	mqttClient->connect_info.will_message[temp] = 0;
 
@@ -586,10 +598,10 @@ void ICACHE_FLASH_ATTR
 MQTT_Connect(MQTT_Client *mqttClient)
 {
 	MQTT_Disconnect(mqttClient);
-	mqttClient->pCon = (struct espconn *)os_zalloc(sizeof(struct espconn));
+	mqttClient->pCon = (struct espconn *)ZALLOC(sizeof(struct espconn));
 	mqttClient->pCon->type = ESPCONN_TCP;
 	mqttClient->pCon->state = ESPCONN_NONE;
-	mqttClient->pCon->proto.tcp = (esp_tcp *)os_zalloc(sizeof(esp_tcp));
+	mqttClient->pCon->proto.tcp = (esp_tcp *)ZALLOC(sizeof(esp_tcp));
 	mqttClient->pCon->proto.tcp->local_port = espconn_port();
 	mqttClient->pCon->proto.tcp->remote_port = mqttClient->port;
 	mqttClient->pCon->reverse = mqttClient;
