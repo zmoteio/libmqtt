@@ -7,7 +7,7 @@
 #
 # Output directors to store intermediate compiled files
 # relative to the project directory
--include ../esphttpdconfig.mk
+-include ../buildconfig.mk
 
 BUILD_BASE	= build
 
