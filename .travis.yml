@@ -1,17 +1,25 @@
 language: cpp
 before_install:
+- sudo apt-get -qq update
 - sudo apt-get install -y python-serial srecord
 install:
-- wget https://github.com/GeorgeHahn/nodemcu-firmware/raw/travis/tools/esp-open-sdk.tar.gz -O tools/esp-open-sdk.tar.gz
-- tar -zxvf tools/esp-open-sdk.tar.gz
-- export PATH=$PATH:$PWD/esp-open-sdk/sdk:$PWD/esp-open-sdk/xtensa-lx106-elf/bin
-- wget http://bbs.espressif.com/download/file.php?id=189 -O tools/esp_iot_sdk_v0.9.5_15_01_23.zip
-- unzip tools/esp_iot_sdk_v0.9.5_15_01_23.zip
+- mkdir tools && cd tools
+- git clone https://github.com/themadinventor/esptool.git
+- wget https://github.com/nodemcu/nodemcu-firmware/raw/master/tools/esp-open-sdk.tar.xz
+- tar -xvf esp-open-sdk.tar.xz
+- export PATH=$PATH:$PWD/esp-open-sdk/xtensa-lx106-elf/bin
+- chmod +x $PWD/esptool/esptool.py
+- export ESPTOOL=$PWD/esptool/esptool.py
+- wget http://bbs.espressif.com/download/file.php?id=1690 -O ESP8266_NONOS_SDK_V2.0.0_16_08_10.zip
+- unzip ESP8266_NONOS_SDK_V2.0.0_16_08_10.zip
+- export SDK_BASE=$PWD/ESP8266_NONOS_SDK
+- cd ..
 script:
-- make all SDK_BASE="$PWD/esp_iot_sdk_v0.9.5"
+- ls
+- cp include/user_config.sample.h include/user_config.local.h
+- make
 - cd firmware/
-- file_name="esp_mqtt_v${TRAVIS_TAG}.${TRAVIS_BUILD_NUMBER}.bin"
-- srec_cat -output ${file_name} -binary 0x00000.bin -binary -fill 0xff 0x00000 0x40000 0x40000.bin -binary -offset 0x40000
+- srec_cat -output ${file_name} -binary esp_mqtt0x00000.bin -binary -fill 0xff 0x00000 0x10000 esp_mqtt0x10000.bin -binary -offset 0x10000
 deploy:
 provider: releases
 api_key:
