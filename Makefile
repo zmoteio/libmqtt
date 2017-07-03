@@ -22,7 +22,7 @@ all: libmqtt.a
 
 OBJS = $(patsubst %.c,%.o,$(wildcard mqtt/*.c))
 libmqtt.a: $(OBJS)
-	$(vecho) "AR $@"
+	$(vecho) ">>AR $@"
 	$(Q) $(AR) cru $@ $^
 
 

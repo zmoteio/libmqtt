@@ -33,7 +33,7 @@
 #include "mqtt_msg.h"
 #include "user_interface.h"
 
-#include "queue.h"
+#include "mqueue.h"
 typedef struct mqtt_event_data_t
 {
   uint8_t type;
