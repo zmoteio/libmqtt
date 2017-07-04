@@ -40,6 +40,8 @@
 #include "mqtt.h"
 #include "mqueue.h"
 
+#include "debug.h"
+
 #define MQTT_TASK_PRIO            2
 #define MQTT_TASK_QUEUE_SIZE      1
 #define MQTT_SEND_TIMOUT      5
@@ -52,17 +54,6 @@
 #define QUEUE_BUFFER_SIZE     2048
 #endif
 
-#define ZALLOC(x) safe_alloc(__LINE__, (x))
-static int tot = 0;
-static void * ICACHE_FLASH_ATTR safe_alloc(int l, int sz)
-{
-	void *ret = (void *)os_zalloc(sz);
-	if (!ret) {
-		os_printf("MQTT memory allocation failure for %d bytes after %d at ln:%d\n", sz, tot, l);
-	} else
-		tot += sz;
-	return ret;
-}
 
 unsigned char *default_certificate;
 unsigned int default_certificate_len = 0;
@@ -84,12 +75,12 @@ mqtt_dns_found(const char *name, ip_addr_t *ipaddr, void *arg)
 
   if (ipaddr == NULL)
   {
-    MQTT_INFO("DNS: Found, but got no ip, try to reconnect\r\n");
+    INFO("DNS: Found, but got no ip, try to reconnect");
     client->connState = TCP_RECONNECT_REQ;
     return;
   }
 
-  MQTT_INFO("DNS: found ip %d.%d.%d.%d\n",
+  INFO("DNS: found ip %d.%d.%d.%d",
             *((uint8 *) &ipaddr->addr),
             *((uint8 *) &ipaddr->addr + 1),
             *((uint8 *) &ipaddr->addr + 2),
@@ -103,7 +94,7 @@ mqtt_dns_found(const char *name, ip_addr_t *ipaddr, void *arg)
       espconn_secure_set_size(ESPCONN_CLIENT, MQTT_SSL_SIZE);
       espconn_secure_connect(client->pCon);
 #else
-      MQTT_INFO("TCP: Do not support SSL\r\n");
+      INFO("TCP: Do not support SSL");
 #endif
     }
     else {
@@ -111,7 +102,7 @@ mqtt_dns_found(const char *name, ip_addr_t *ipaddr, void *arg)
     }
 
     client->connState = TCP_CONNECTING;
-    MQTT_INFO("TCP: connecting...\r\n");
+    INFO("TCP: connecting...");
   }
 
   system_os_post(MQTT_TASK_PRIO, 0, (os_param_t)client);
@@ -137,7 +128,7 @@ deliver_publish(MQTT_Client* client, uint8_t* message, int length)
 void ICACHE_FLASH_ATTR
 mqtt_send_keepalive(MQTT_Client *client)
 {
-  MQTT_INFO("\r\nMQTT: Send keepalive packet to %s:%d!\r\n", client->host, client->port);
+  INFO("keepalive to %s:%d", client->host, client->port);
   client->mqtt_state.outbound_message = mqtt_msg_pingreq(&client->mqtt_state.mqtt_connection);
   client->mqtt_state.pending_msg_type = MQTT_MSG_TYPE_PINGREQ;
   client->mqtt_state.pending_msg_type = mqtt_get_type(client->mqtt_state.outbound_message->data);
@@ -145,13 +136,13 @@ mqtt_send_keepalive(MQTT_Client *client)
 
 
   client->sendTimeout = MQTT_SEND_TIMOUT;
-  MQTT_INFO("MQTT: Sending, type: %d, id: %04X\r\n", client->mqtt_state.pending_msg_type, client->mqtt_state.pending_msg_id);
+  DEBUG("Sending, type: %d, id: %04X", client->mqtt_state.pending_msg_type, client->mqtt_state.pending_msg_id);
   err_t result = ESPCONN_OK;
   if (client->security) {
 #ifdef MQTT_SSL_ENABLE
     result = espconn_secure_send(client->pCon, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length);
 #else
-    MQTT_INFO("TCP: Do not support SSL\r\n");
+    INFO("TCP: Do not support SSL");
 #endif
   }
   else {
@@ -179,17 +170,21 @@ void ICACHE_FLASH_ATTR
 mqtt_tcpclient_delete(MQTT_Client *mqttClient)
 {
   if (mqttClient->pCon != NULL) {
-    MQTT_INFO("TCP: Free memory\r\n");
+    INFO("TCP: Free memory");
     // Force abort connections
     espconn_abort(mqttClient->pCon);
     // Delete connections
     espconn_delete(mqttClient->pCon);
-
+#if 0
     if (mqttClient->pCon->proto.tcp) {
       os_free(mqttClient->pCon->proto.tcp);
       mqttClient->pCon->proto.tcp = NULL;
     }
     os_free(mqttClient->pCon);
+#else
+  os_memset(&(mqttClient->conn), 0, sizeof(mqttClient->conn));
+  os_memset(&(mqttClient->tcp), 0, sizeof(mqttClient->tcp));
+#endif
     mqttClient->pCon = NULL;
   }
 }
@@ -209,21 +204,22 @@ mqtt_client_delete(MQTT_Client *mqttClient)
     mqtt_tcpclient_delete(mqttClient);
   }
 
+#if 0
   if (mqttClient->host != NULL) {
     os_free(mqttClient->host);
     mqttClient->host = NULL;
   }
-
+#endif
   if (mqttClient->user_data != NULL) {
     os_free(mqttClient->user_data);
     mqttClient->user_data = NULL;
   }
-
+#if 0
   if (mqttClient->mqtt_state.in_buffer != NULL) {
     os_free(mqttClient->mqtt_state.in_buffer);
     mqttClient->mqtt_state.in_buffer = NULL;
   }
-
+#endif
   if (mqttClient->mqtt_state.out_buffer != NULL) {
     os_free(mqttClient->mqtt_state.out_buffer);
     mqttClient->mqtt_state.out_buffer = NULL;
@@ -242,37 +238,6 @@ mqtt_client_delete(MQTT_Client *mqttClient)
     mqttClient->mqtt_state.mqtt_connection.buffer = NULL;
   }
 
-  if (mqttClient->connect_info.client_id != NULL) {
-#ifdef PROTOCOL_NAMEv311
-    /* Don't attempt to free if it's the zero_len array */
-    if ( ((uint8_t*)mqttClient->connect_info.client_id) != zero_len_id )
-      os_free(mqttClient->connect_info.client_id);
-#else
-    os_free(mqttClient->connect_info.client_id);
-#endif
-    mqttClient->connect_info.client_id = NULL;
-  }
-
-  if (mqttClient->connect_info.username != NULL) {
-    os_free(mqttClient->connect_info.username);
-    mqttClient->connect_info.username = NULL;
-  }
-
-  if (mqttClient->connect_info.password != NULL) {
-    os_free(mqttClient->connect_info.password);
-    mqttClient->connect_info.password = NULL;
-  }
-
-  if (mqttClient->connect_info.will_topic != NULL) {
-    os_free(mqttClient->connect_info.will_topic);
-    mqttClient->connect_info.will_topic = NULL;
-  }
-
-  if (mqttClient->connect_info.will_message != NULL) {
-    os_free(mqttClient->connect_info.will_message);
-    mqttClient->connect_info.will_message = NULL;
-  }
-
   if (mqttClient->msgQueue.buf != NULL) {
     os_free(mqttClient->msgQueue.buf);
     mqttClient->msgQueue.buf = NULL;
@@ -287,7 +252,7 @@ mqtt_client_delete(MQTT_Client *mqttClient)
   mqttClient->timeoutCb = NULL;
   mqttClient->dataCb = NULL;
 
-  MQTT_INFO("MQTT: client already deleted\r\n");
+  INFO("client already deleted");
 }
 
 
@@ -311,34 +276,34 @@ mqtt_tcpclient_recv(void *arg, char *pdata, unsigned short len)
 
   client->keepAliveTick = 0;
 READPACKET:
-  MQTT_INFO("TCP: data received %d bytes\r\n", len);
-  // MQTT_INFO("STATE: %d\r\n", client->connState);
+  DEBUG("TCP: data received %d bytes", len);
+  // INFO("STATE: %d", client->connState);
   if (len < MQTT_BUF_SIZE && len > 0) {
-    os_memcpy(client->mqtt_state.in_buffer, pdata, len);
+    //os_memcpy(client->mqtt_state.in_buffer, pdata, len);
 
-    msg_type = mqtt_get_type(client->mqtt_state.in_buffer);
-    msg_qos = mqtt_get_qos(client->mqtt_state.in_buffer);
-    msg_id = mqtt_get_id(client->mqtt_state.in_buffer, client->mqtt_state.in_buffer_length);
+    msg_type = mqtt_get_type(pdata);
+    msg_qos = mqtt_get_qos(pdata);
+    msg_id = mqtt_get_id(pdata, len);
     switch (client->connState) {
       case MQTT_CONNECT_SENDING:
         if (msg_type == MQTT_MSG_TYPE_CONNACK) {
           if (client->mqtt_state.pending_msg_type != MQTT_MSG_TYPE_CONNECT) {
-            MQTT_INFO("MQTT: Invalid packet\r\n");
+            INFO("Invalid packet");
             if (client->security) {
 #ifdef MQTT_SSL_ENABLE
               espconn_secure_disconnect(client->pCon);
 #else
-              MQTT_INFO("TCP: Do not support SSL\r\n");
+              INFO("TCP: Do not support SSL");
 #endif
             }
             else {
               espconn_disconnect(client->pCon);
             }
           } else {
-            msg_conn_ret = mqtt_get_connect_return_code(client->mqtt_state.in_buffer);
+            msg_conn_ret = mqtt_get_connect_return_code(pdata);
             switch (msg_conn_ret) {
               case CONNECTION_ACCEPTED:
-                MQTT_INFO("MQTT: Connected to %s:%d\r\n", client->host, client->port);
+                INFO("Connected to %s:%d", client->host, client->port);
                 client->connState = MQTT_DATA;
                 if (client->connectedCb)
                   client->connectedCb((uint32_t*)client);
@@ -347,13 +312,13 @@ READPACKET:
               case CONNECTION_REFUSE_SERVER_UNAVAILABLE:
               case CONNECTION_REFUSE_BAD_USERNAME:
               case CONNECTION_REFUSE_NOT_AUTHORIZED:
-                MQTT_INFO("MQTT: Connection refuse, reason code: %d\r\n", msg_conn_ret);
+                INFO("Connection refuse, reason code: %d", msg_conn_ret);
               default:
                 if (client->security) {
 #ifdef MQTT_SSL_ENABLE
                   espconn_secure_disconnect(client->pCon);
 #else
-                  MQTT_INFO("TCP: Do not support SSL\r\n");
+                  INFO("TCP: Do not support SSL");
 #endif
                 }
                 else {
@@ -369,7 +334,7 @@ READPACKET:
       case MQTT_DATA:
       case MQTT_KEEPALIVE_SEND:
         client->mqtt_state.message_length_read = len;
-        client->mqtt_state.message_length = mqtt_get_total_length(client->mqtt_state.in_buffer, client->mqtt_state.message_length_read);
+        client->mqtt_state.message_length = mqtt_get_total_length(pdata, client->mqtt_state.message_length_read);
 
 
         switch (msg_type)
@@ -377,11 +342,11 @@ READPACKET:
 
           case MQTT_MSG_TYPE_SUBACK:
             if (client->mqtt_state.pending_msg_type == MQTT_MSG_TYPE_SUBSCRIBE && client->mqtt_state.pending_msg_id == msg_id)
-              MQTT_INFO("MQTT: Subscribe successful\r\n");
+              INFO("Subscribe successful");
             break;
           case MQTT_MSG_TYPE_UNSUBACK:
             if (client->mqtt_state.pending_msg_type == MQTT_MSG_TYPE_UNSUBSCRIBE && client->mqtt_state.pending_msg_id == msg_id)
-              MQTT_INFO("MQTT: UnSubscribe successful\r\n");
+              INFO("UnSubscribe successful");
             break;
           case MQTT_MSG_TYPE_PUBLISH:
             if (msg_qos == 1)
@@ -389,41 +354,41 @@ READPACKET:
             else if (msg_qos == 2)
               client->mqtt_state.outbound_message = mqtt_msg_pubrec(&client->mqtt_state.mqtt_connection, msg_id);
             if (msg_qos == 1 || msg_qos == 2) {
-              MQTT_INFO("MQTT: Queue response QoS: %d\r\n", msg_qos);
+              INFO("Queue response QoS: %d", msg_qos);
               if (QUEUE_Puts(&client->msgQueue, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length) == -1) {
-                MQTT_INFO("MQTT: Queue full\r\n");
+                INFO("Queue full");
               }
             }
 
-            deliver_publish(client, client->mqtt_state.in_buffer, client->mqtt_state.message_length_read);
+            deliver_publish(client, pdata, client->mqtt_state.message_length_read);
             break;
           case MQTT_MSG_TYPE_PUBACK:
             if (client->mqtt_state.pending_msg_type == MQTT_MSG_TYPE_PUBLISH && client->mqtt_state.pending_msg_id == msg_id) {
-              MQTT_INFO("MQTT: received MQTT_MSG_TYPE_PUBACK, finish QoS1 publish\r\n");
+              INFO("received MQTT_MSG_TYPE_PUBACK, finish QoS1 publish");
             }
 
             break;
           case MQTT_MSG_TYPE_PUBREC:
             client->mqtt_state.outbound_message = mqtt_msg_pubrel(&client->mqtt_state.mqtt_connection, msg_id);
             if (QUEUE_Puts(&client->msgQueue, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length) == -1) {
-              MQTT_INFO("MQTT: Queue full\r\n");
+              INFO("Queue full");
             }
             break;
           case MQTT_MSG_TYPE_PUBREL:
             client->mqtt_state.outbound_message = mqtt_msg_pubcomp(&client->mqtt_state.mqtt_connection, msg_id);
             if (QUEUE_Puts(&client->msgQueue, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length) == -1) {
-              MQTT_INFO("MQTT: Queue full\r\n");
+              INFO("Queue full");
             }
             break;
           case MQTT_MSG_TYPE_PUBCOMP:
             if (client->mqtt_state.pending_msg_type == MQTT_MSG_TYPE_PUBLISH && client->mqtt_state.pending_msg_id == msg_id) {
-              MQTT_INFO("MQTT: receive MQTT_MSG_TYPE_PUBCOMP, finish QoS2 publish\r\n");
+              INFO("receive MQTT_MSG_TYPE_PUBCOMP, finish QoS2 publish");
             }
             break;
           case MQTT_MSG_TYPE_PINGREQ:
             client->mqtt_state.outbound_message = mqtt_msg_pingresp(&client->mqtt_state.mqtt_connection);
             if (QUEUE_Puts(&client->msgQueue, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length) == -1) {
-              MQTT_INFO("MQTT: Queue full\r\n");
+              INFO("Queue full");
             }
             break;
           case MQTT_MSG_TYPE_PINGRESP:
@@ -444,7 +409,7 @@ READPACKET:
             len -= client->mqtt_state.message_length;
             pdata += client->mqtt_state.message_length;
 
-            MQTT_INFO("Get another published message\r\n");
+            INFO("Get another published message");
             goto READPACKET;
           }
 
@@ -452,7 +417,7 @@ READPACKET:
         break;
     }
   } else {
-    MQTT_INFO("ERROR: Message too long\r\n");
+    INFO("ERROR: Message too long");
   }
   system_os_post(MQTT_TASK_PRIO, 0, (os_param_t)client);
 }
@@ -467,7 +432,7 @@ mqtt_tcpclient_sent_cb(void *arg)
 {
   struct espconn *pCon = (struct espconn *)arg;
   MQTT_Client* client = (MQTT_Client *)pCon->reverse;
-  MQTT_INFO("TCP: Sent\r\n");
+  DEBUG("TCP: Sent");
   client->sendTimeout = 0;
   client->keepAliveTick = 0;
 
@@ -510,7 +475,7 @@ mqtt_tcpclient_discon_cb(void *arg)
 
   struct espconn *pespconn = (struct espconn *)arg;
   MQTT_Client* client = (MQTT_Client *)pespconn->reverse;
-  MQTT_INFO("TCP: Disconnected callback\r\n");
+  INFO("TCP: Disconnected callback");
   if (TCP_DISCONNECTING == client->connState) {
     client->connState = TCP_DISCONNECTED;
   }
@@ -542,7 +507,7 @@ mqtt_tcpclient_connect_cb(void *arg)
   espconn_regist_disconcb(client->pCon, mqtt_tcpclient_discon_cb);
   espconn_regist_recvcb(client->pCon, mqtt_tcpclient_recv);////////
   espconn_regist_sentcb(client->pCon, mqtt_tcpclient_sent_cb);///////
-  MQTT_INFO("MQTT: Connected to broker %s:%d\r\n", client->host, client->port);
+  INFO("Connected to broker %s:%d", client->host, client->port);
 
   mqtt_msg_init(&client->mqtt_state.mqtt_connection, client->mqtt_state.out_buffer, client->mqtt_state.out_buffer_length);
   client->mqtt_state.outbound_message = mqtt_msg_connect(&client->mqtt_state.mqtt_connection, client->mqtt_state.connect_info);
@@ -551,12 +516,12 @@ mqtt_tcpclient_connect_cb(void *arg)
 
 
   client->sendTimeout = MQTT_SEND_TIMOUT;
-  MQTT_INFO("MQTT: Sending, type: %d, id: %04X\r\n", client->mqtt_state.pending_msg_type, client->mqtt_state.pending_msg_id);
+  INFO("Sending, type: %d, id: %04X", client->mqtt_state.pending_msg_type, client->mqtt_state.pending_msg_id);
   if (client->security) {
 #ifdef MQTT_SSL_ENABLE
     espconn_secure_send(client->pCon, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length);
 #else
-    MQTT_INFO("TCP: Do not support SSL\r\n");
+    INFO("TCP: Do not support SSL");
 #endif
   }
   else {
@@ -579,7 +544,7 @@ mqtt_tcpclient_recon_cb(void *arg, sint8 errType)
   struct espconn *pCon = (struct espconn *)arg;
   MQTT_Client* client = (MQTT_Client *)pCon->reverse;
 
-  MQTT_INFO("TCP: Reconnect to %s:%d\r\n", client->host, client->port);
+  INFO("TCP: Reconnect to %s:%d", client->host, client->port);
 
   client->connState = TCP_RECONNECT_REQ;
 
@@ -607,14 +572,14 @@ MQTT_Publish(MQTT_Client *client, const char* topic, const char* data, int data_
                                         qos, retain,
                                         &client->mqtt_state.pending_msg_id);
   if (client->mqtt_state.outbound_message->length == 0) {
-    MQTT_INFO("MQTT: Queuing publish failed\r\n");
+    INFO("Queuing publish failed");
     return FALSE;
   }
-  MQTT_INFO("MQTT: queuing publish, length: %d, queue size(%d/%d)\r\n", client->mqtt_state.outbound_message->length, client->msgQueue.rb.fill_cnt, client->msgQueue.rb.size);
+  INFO("queuing publish, length: %d, queue size(%d/%d)", client->mqtt_state.outbound_message->length, client->msgQueue.rb.fill_cnt, client->msgQueue.rb.size);
   while (QUEUE_Puts(&client->msgQueue, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length) == -1) {
-    MQTT_INFO("MQTT: Queue full\r\n");
+    INFO("Queue full");
     if (QUEUE_Gets(&client->msgQueue, dataBuffer, &dataLen, MQTT_BUF_SIZE) == -1) {
-      MQTT_INFO("MQTT: Serious buffer error\r\n");
+      INFO("Serious buffer error");
       return FALSE;
     }
   }
@@ -638,11 +603,11 @@ MQTT_Subscribe(MQTT_Client *client, char* topic, uint8_t qos)
   client->mqtt_state.outbound_message = mqtt_msg_subscribe(&client->mqtt_state.mqtt_connection,
                                         topic, qos,
                                         &client->mqtt_state.pending_msg_id);
-  MQTT_INFO("MQTT: queue subscribe, topic\"%s\", id: %d\r\n", topic, client->mqtt_state.pending_msg_id);
+  INFO("queue subscribe, topic\"%s\", id: %d", topic, client->mqtt_state.pending_msg_id);
   while (QUEUE_Puts(&client->msgQueue, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length) == -1) {
-    MQTT_INFO("MQTT: Queue full\r\n");
+    INFO("Queue full");
     if (QUEUE_Gets(&client->msgQueue, dataBuffer, &dataLen, MQTT_BUF_SIZE) == -1) {
-      MQTT_INFO("MQTT: Serious buffer error\r\n");
+      INFO("Serious buffer error");
       return FALSE;
     }
   }
@@ -665,11 +630,11 @@ MQTT_UnSubscribe(MQTT_Client *client, char* topic)
   client->mqtt_state.outbound_message = mqtt_msg_unsubscribe(&client->mqtt_state.mqtt_connection,
                                         topic,
                                         &client->mqtt_state.pending_msg_id);
-  MQTT_INFO("MQTT: queue un-subscribe, topic\"%s\", id: %d\r\n", topic, client->mqtt_state.pending_msg_id);
+  INFO("queue un-subscribe, topic\"%s\", id: %d", topic, client->mqtt_state.pending_msg_id);
   while (QUEUE_Puts(&client->msgQueue, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length) == -1) {
-    MQTT_INFO("MQTT: Queue full\r\n");
+    INFO("Queue full");
     if (QUEUE_Gets(&client->msgQueue, dataBuffer, &dataLen, MQTT_BUF_SIZE) == -1) {
-      MQTT_INFO("MQTT: Serious buffer error\r\n");
+      INFO("Serious buffer error");
       return FALSE;
     }
   }
@@ -689,14 +654,14 @@ MQTT_Ping(MQTT_Client *client)
   uint16_t dataLen;
   client->mqtt_state.outbound_message = mqtt_msg_pingreq(&client->mqtt_state.mqtt_connection);
   if (client->mqtt_state.outbound_message->length == 0) {
-    MQTT_INFO("MQTT: Queuing publish failed\r\n");
+    INFO("Queuing publish failed");
     return FALSE;
   }
-  MQTT_INFO("MQTT: queuing publish, length: %d, queue size(%d/%d)\r\n", client->mqtt_state.outbound_message->length, client->msgQueue.rb.fill_cnt, client->msgQueue.rb.size);
+  INFO("queuing publish, length: %d, queue size(%d/%d)", client->mqtt_state.outbound_message->length, client->msgQueue.rb.fill_cnt, client->msgQueue.rb.size);
   while (QUEUE_Puts(&client->msgQueue, client->mqtt_state.outbound_message->data, client->mqtt_state.outbound_message->length) == -1) {
-    MQTT_INFO("MQTT: Queue full\r\n");
+    INFO("Queue full");
     if (QUEUE_Gets(&client->msgQueue, dataBuffer, &dataLen, MQTT_BUF_SIZE) == -1) {
-      MQTT_INFO("MQTT: Serious buffer error\r\n");
+      INFO("Serious buffer error");
       return FALSE;
     }
   }
@@ -719,7 +684,7 @@ MQTT_Task(os_event_t *e)
     case TCP_RECONNECT:
       mqtt_tcpclient_delete(client);
       MQTT_Connect(client);
-      MQTT_INFO("TCP: Reconnect to: %s:%d\r\n", client->host, client->port);
+      INFO("TCP: Reconnect to: %s:%d", client->host, client->port);
       client->connState = TCP_CONNECTING;
       break;
     case MQTT_DELETING:
@@ -729,7 +694,7 @@ MQTT_Task(os_event_t *e)
 #ifdef MQTT_SSL_ENABLE
         espconn_secure_disconnect(client->pCon);
 #else
-        MQTT_INFO("TCP: Do not support SSL\r\n");
+        INFO("TCP: Do not support SSL");
 #endif
       }
       else {
@@ -737,11 +702,11 @@ MQTT_Task(os_event_t *e)
       }
       break;
     case TCP_DISCONNECTED:
-      MQTT_INFO("MQTT: Disconnected\r\n");
+      INFO("Disconnected");
       mqtt_tcpclient_delete(client);
       break;
     case MQTT_DELETED:
-      MQTT_INFO("MQTT: Deleted client\r\n");
+      INFO("Deleted client");
       mqtt_client_delete(client);
       break;
     case MQTT_KEEPALIVE_SEND:
@@ -757,12 +722,12 @@ MQTT_Task(os_event_t *e)
 
 
         client->sendTimeout = MQTT_SEND_TIMOUT;
-        MQTT_INFO("MQTT: Sending, type: %d, id: %04X\r\n", client->mqtt_state.pending_msg_type, client->mqtt_state.pending_msg_id);
+        INFO("Sending, type: %d, id: %04X", client->mqtt_state.pending_msg_type, client->mqtt_state.pending_msg_id);
         if (client->security) {
 #ifdef MQTT_SSL_ENABLE
           espconn_secure_send(client->pCon, dataBuffer, dataLen);
 #else
-          MQTT_INFO("TCP: Do not support SSL\r\n");
+          INFO("TCP: Do not support SSL");
 #endif
         }
         else {
@@ -788,12 +753,9 @@ void ICACHE_FLASH_ATTR
 MQTT_InitConnection(MQTT_Client *mqttClient, uint8_t* host, uint32_t port, uint8_t security)
 {
   uint32_t temp;
-  MQTT_INFO("MQTT:InitConnection\r\n");
+  INFO("MQTT:InitConnection");
   os_memset(mqttClient, 0, sizeof(MQTT_Client));
-  temp = os_strlen(host);
-  mqttClient->host = (uint8_t*)os_zalloc(temp + 1);
-  os_strcpy(mqttClient->host, host);
-  mqttClient->host[temp] = 0;
+  SAFE_STRCPY(mqttClient->host, host);
   mqttClient->port = port;
   mqttClient->security = security;
 
@@ -812,7 +774,7 @@ BOOL ICACHE_FLASH_ATTR
 MQTT_InitClient(MQTT_Client *mqttClient, uint8_t* client_id, uint8_t* client_user, uint8_t* client_pass, uint32_t keepAliveTime, uint8_t cleanSession)
 {
   uint32_t temp;
-  MQTT_INFO("MQTT:InitClient\r\n");
+  INFO("MQTT:InitClient");
 
   os_memset(&mqttClient->connect_info, 0, sizeof(mqtt_connect_info_t));
 
@@ -822,51 +784,28 @@ MQTT_InitClient(MQTT_Client *mqttClient, uint8_t* client_id, uint8_t* client_use
   #ifdef PROTOCOL_NAMEv311
     if (cleanSession)
     {
-      mqttClient->connect_info.client_id = zero_len_id;
+      os_memcpy(mqttClient->connect_info.client_id, zero_len_id, sizeof(zero_len_id));
     } else {
-      MQTT_INFO("cleanSession must be set to use 0 length client_id\r\n");
+      INFO("cleanSession must be set to use 0 length client_id");
       return false;
     }
     /* Not supported. Return. */
   #else
-    MQTT_INFO("Client ID required for MQTT < 3.1.1!\r\n");
+    INFO("Client ID required for MQTT < 3.1.1!");
     return false;
   #endif
  }
-
-  /* If connect_info's client_id is still NULL and we get here, we can        *
-   * assume the passed client_id is non-NULL.                                 */
-  if ( !(mqttClient->connect_info.client_id) )
-  {
-    temp = os_strlen(client_id);
-    mqttClient->connect_info.client_id = (uint8_t*)os_zalloc(temp + 1);
-    os_strcpy(mqttClient->connect_info.client_id, client_id);
-    mqttClient->connect_info.client_id[temp] = 0;
-  }
-
-  if (client_user)
-  {
-    temp = os_strlen(client_user);
-    mqttClient->connect_info.username = (uint8_t*)os_zalloc(temp + 1);
-    os_strcpy(mqttClient->connect_info.username, client_user);
-    mqttClient->connect_info.username[temp] = 0;
-  }
-
-  if (client_pass)
-  {
-    temp = os_strlen(client_pass);
-    mqttClient->connect_info.password = (uint8_t*)os_zalloc(temp + 1);
-    os_strcpy(mqttClient->connect_info.password, client_pass);
-    mqttClient->connect_info.password[temp] = 0;
-  }
+ SAFE_STRCPY(mqttClient->connect_info.client_id, client_id);
+ SAFE_STRCPY(mqttClient->connect_info.username, client_user);
+ SAFE_STRCPY(mqttClient->connect_info.password, client_pass);
 
 
   mqttClient->connect_info.keepalive = keepAliveTime;
   mqttClient->connect_info.clean_session = cleanSession;
 
-  mqttClient->mqtt_state.in_buffer = (uint8_t *)os_zalloc(MQTT_BUF_SIZE);
-  mqttClient->mqtt_state.in_buffer_length = MQTT_BUF_SIZE;
-  mqttClient->mqtt_state.out_buffer =  (uint8_t *)os_zalloc(MQTT_BUF_SIZE);
+  //mqttClient->mqtt_state.in_buffer = ZALLOC(MQTT_BUF_SIZE);
+  //mqttClient->mqtt_state.in_buffer_length = MQTT_BUF_SIZE;
+  mqttClient->mqtt_state.out_buffer =  ZALLOC(MQTT_BUF_SIZE);
   mqttClient->mqtt_state.out_buffer_length = MQTT_BUF_SIZE;
   mqttClient->mqtt_state.connect_info = &mqttClient->connect_info;
 
@@ -881,17 +820,8 @@ MQTT_InitClient(MQTT_Client *mqttClient, uint8_t* client_id, uint8_t* client_use
 void ICACHE_FLASH_ATTR
 MQTT_InitLWT(MQTT_Client *mqttClient, uint8_t* will_topic, uint8_t* will_msg, uint8_t will_qos, uint8_t will_retain)
 {
-  uint32_t temp;
-  temp = os_strlen(will_topic);
-  mqttClient->connect_info.will_topic = (uint8_t*)os_zalloc(temp + 1);
-  os_strcpy(mqttClient->connect_info.will_topic, will_topic);
-  mqttClient->connect_info.will_topic[temp] = 0;
-
-  temp = os_strlen(will_msg);
-  mqttClient->connect_info.will_message = (uint8_t*)os_zalloc(temp + 1);
-  os_strcpy(mqttClient->connect_info.will_message, will_msg);
-  mqttClient->connect_info.will_message[temp] = 0;
-
+  SAFE_STRCPY(mqttClient->connect_info.will_topic, will_topic);
+  SAFE_STRCPY(mqttClient->connect_info.will_message, will_msg);
 
   mqttClient->connect_info.will_qos = will_qos;
   mqttClient->connect_info.will_retain = will_retain;
@@ -910,10 +840,12 @@ MQTT_Connect(MQTT_Client *mqttClient)
     // disconnection callback is invoked.
     mqtt_tcpclient_delete(mqttClient);
   }
-  mqttClient->pCon = (struct espconn *)os_zalloc(sizeof(struct espconn));
+  //mqttClient->pCon = ZALLOC(sizeof(struct espconn));
+  mqttClient->pCon = &(mqttClient->conn);
   mqttClient->pCon->type = ESPCONN_TCP;
   mqttClient->pCon->state = ESPCONN_NONE;
-  mqttClient->pCon->proto.tcp = (esp_tcp *)os_zalloc(sizeof(esp_tcp));
+  //mqttClient->pCon->proto.tcp = ZALLOC(sizeof(esp_tcp));
+  mqttClient->pCon->proto.tcp = &(mqttClient->tcp);
   mqttClient->pCon->proto.tcp->local_port = espconn_port();
   mqttClient->pCon->proto.tcp->remote_port = mqttClient->port;
   mqttClient->pCon->reverse = mqttClient;
@@ -929,14 +861,14 @@ MQTT_Connect(MQTT_Client *mqttClient)
   os_timer_arm(&mqttClient->mqttTimer, 1000, 1);
 
   if (UTILS_StrToIP(mqttClient->host, &mqttClient->pCon->proto.tcp->remote_ip)) {
-    MQTT_INFO("TCP: Connect to ip  %s:%d\r\n", mqttClient->host, mqttClient->port);
+    INFO("TCP: Connect to ip  %s:%d", mqttClient->host, mqttClient->port);
     if (mqttClient->security)
     {
 #ifdef MQTT_SSL_ENABLE
       espconn_secure_set_size(ESPCONN_CLIENT, MQTT_SSL_SIZE);
       espconn_secure_connect(mqttClient->pCon);
 #else
-      MQTT_INFO("TCP: Do not support SSL\r\n");
+      INFO("TCP: Do not support SSL");
 #endif
     }
     else
@@ -945,7 +877,7 @@ MQTT_Connect(MQTT_Client *mqttClient)
     }
   }
   else {
-    MQTT_INFO("TCP: Connect to domain %s:%d\r\n", mqttClient->host, mqttClient->port);
+    INFO("TCP: Connect to domain %s:%d", mqttClient->host, mqttClient->port);
     espconn_gethostbyname(mqttClient->pCon, mqttClient->host, &mqttClient->ip, mqtt_dns_found);
   }
   mqttClient->connState = TCP_CONNECTING;

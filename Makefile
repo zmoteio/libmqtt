@@ -16,7 +16,7 @@ $1/%.o: %.c
 	$(vecho) "CC $$<"
 	$(Q) $(CC) $(INCDIR) $(MODULE_INCDIR) $(EXTRA_INCDIR) $(SDK_INCDIR) $(CFLAGS)  -c $$< -o $$@
 endef
-CFLAGS += -Imqtt/include
+CFLAGS += -Imqtt/include -I../user -I../include
 
 all: libmqtt.a
 

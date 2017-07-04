@@ -49,9 +49,9 @@ typedef struct mqtt_state_t
   uint16_t port;
   int auto_reconnect;
   mqtt_connect_info_t* connect_info;
-  uint8_t* in_buffer;
+  //uint8_t* in_buffer;
   uint8_t* out_buffer;
-  int in_buffer_length;
+  //int in_buffer_length;
   int out_buffer_length;
   uint16_t message_length;
   uint16_t message_length_read;
@@ -92,9 +92,11 @@ typedef void (*MqttCallback)(uint32_t *args);
 typedef void (*MqttDataCallback)(uint32_t *args, const char* topic, uint32_t topic_len, const char *data, uint32_t lengh);
 
 typedef struct  {
+  struct espconn conn;
+  esp_tcp tcp; 
   struct espconn *pCon;
   uint8_t security;
-  uint8_t* host;
+  uint8_t host[64];
   uint32_t port;
   ip_addr_t ip;
   mqtt_state_t  mqtt_state;

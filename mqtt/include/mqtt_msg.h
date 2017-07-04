@@ -44,7 +44,7 @@ extern "C" {
 *
 */
 /* 7      6     5     4     3     2     1     0*/
-/*|      --- Message Type----     |  DUP Flag |    QoS Level    | Retain  |
+/*|      --- Message Type----     |  DUP Flag |    QoS Level    | Retain  | */
 /*                    Remaining Length                 */
 
 
@@ -93,13 +93,18 @@ typedef struct mqtt_connection
 
 } mqtt_connection_t;
 
+#define MAX_CLIENT_ID (16)
+#define MAX_USERNAME (16)
+#define MAX_PASSWORD (32)
+#define MAX_TOPIC (32)
+#define MAX_LWT_MSG (32)
 typedef struct mqtt_connect_info
 {
-  char* client_id;
-  char* username;
-  char* password;
-  char* will_topic;
-  char* will_message;
+  char client_id[MAX_CLIENT_ID];
+  char username[MAX_USERNAME];
+  char password[MAX_PASSWORD];
+  char will_topic[MAX_TOPIC];
+  char will_message[MAX_LWT_MSG];
   uint32_t keepalive;
   int will_qos;
   int will_retain;
