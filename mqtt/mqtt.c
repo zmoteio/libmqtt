@@ -177,10 +177,10 @@ mqtt_tcpclient_delete(MQTT_Client *mqttClient)
     espconn_delete(mqttClient->pCon);
 #if 0
     if (mqttClient->pCon->proto.tcp) {
-      os_free(mqttClient->pCon->proto.tcp);
+      FREE(mqttClient->pCon->proto.tcp);
       mqttClient->pCon->proto.tcp = NULL;
     }
-    os_free(mqttClient->pCon);
+    FREE(mqttClient->pCon);
 #else
   os_memset(&(mqttClient->conn), 0, sizeof(mqttClient->conn));
   os_memset(&(mqttClient->tcp), 0, sizeof(mqttClient->tcp));
@@ -206,29 +206,29 @@ mqtt_client_delete(MQTT_Client *mqttClient)
 
 #if 0
   if (mqttClient->host != NULL) {
-    os_free(mqttClient->host);
+    FREE(mqttClient->host);
     mqttClient->host = NULL;
   }
 #endif
   if (mqttClient->user_data != NULL) {
-    os_free(mqttClient->user_data);
+    FREE(mqttClient->user_data);
     mqttClient->user_data = NULL;
   }
 #if 0
   if (mqttClient->mqtt_state.in_buffer != NULL) {
-    os_free(mqttClient->mqtt_state.in_buffer);
+    FREE(mqttClient->mqtt_state.in_buffer);
     mqttClient->mqtt_state.in_buffer = NULL;
   }
 #endif
   if (mqttClient->mqtt_state.out_buffer != NULL) {
-    os_free(mqttClient->mqtt_state.out_buffer);
+    FREE(mqttClient->mqtt_state.out_buffer);
     mqttClient->mqtt_state.out_buffer = NULL;
   }
 
   if (mqttClient->mqtt_state.outbound_message != NULL) {
     if (mqttClient->mqtt_state.outbound_message->data != NULL)
     {
-      os_free(mqttClient->mqtt_state.outbound_message->data);
+      FREE(mqttClient->mqtt_state.outbound_message->data);
       mqttClient->mqtt_state.outbound_message->data = NULL;
     }
   }
@@ -239,7 +239,7 @@ mqtt_client_delete(MQTT_Client *mqttClient)
   }
 
   if (mqttClient->msgQueue.buf != NULL) {
-    os_free(mqttClient->msgQueue.buf);
+    FREE(mqttClient->msgQueue.buf);
     mqttClient->msgQueue.buf = NULL;
   }
 
