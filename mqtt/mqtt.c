@@ -29,6 +29,7 @@
 * POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include "esp8266.h"
 #include "user_interface.h"
 #include "osapi.h"
 #include "espconn.h"
@@ -269,7 +270,7 @@ mqtt_tcpclient_recv(void *arg, char *pdata, unsigned short len)
   uint8_t msg_type;
   uint8_t msg_qos;
   uint16_t msg_id;
-  uint8_t msg_conn_ret;
+  int msg_conn_ret;
 
   struct espconn *pCon = (struct espconn*)arg;
   MQTT_Client *client = (MQTT_Client *)pCon->reverse;
@@ -281,9 +282,9 @@ READPACKET:
   if (len < MQTT_BUF_SIZE && len > 0) {
     //os_memcpy(client->mqtt_state.in_buffer, pdata, len);
 
-    msg_type = mqtt_get_type(pdata);
-    msg_qos = mqtt_get_qos(pdata);
-    msg_id = mqtt_get_id(pdata, len);
+    msg_type = mqtt_get_type((uint8_t *)pdata);
+    msg_qos = mqtt_get_qos((uint8_t *)pdata);
+    msg_id = mqtt_get_id((uint8_t *)pdata, len);
     switch (client->connState) {
       case MQTT_CONNECT_SENDING:
         if (msg_type == MQTT_MSG_TYPE_CONNACK) {
@@ -300,7 +301,7 @@ READPACKET:
               espconn_disconnect(client->pCon);
             }
           } else {
-            msg_conn_ret = mqtt_get_connect_return_code(pdata);
+            msg_conn_ret = mqtt_get_connect_return_code((uint8_t *)pdata);
             switch (msg_conn_ret) {
               case CONNECTION_ACCEPTED:
                 INFO("Connected to %s:%d", client->host, client->port);
@@ -320,26 +321,21 @@ READPACKET:
 #else
                   INFO("TCP: Do not support SSL");
 #endif
-                }
-                else {
+                } else {
                   espconn_disconnect(client->pCon);
                 }
-
             }
-
           }
-
         }
         break;
       case MQTT_DATA:
       case MQTT_KEEPALIVE_SEND:
         client->mqtt_state.message_length_read = len;
-        client->mqtt_state.message_length = mqtt_get_total_length(pdata, client->mqtt_state.message_length_read);
+        client->mqtt_state.message_length = mqtt_get_total_length((uint8_t *)pdata, client->mqtt_state.message_length_read);
 
 
         switch (msg_type)
         {
-
           case MQTT_MSG_TYPE_SUBACK:
             if (client->mqtt_state.pending_msg_type == MQTT_MSG_TYPE_SUBSCRIBE && client->mqtt_state.pending_msg_id == msg_id)
               INFO("Subscribe successful");
@@ -359,8 +355,7 @@ READPACKET:
                 INFO("Queue full");
               }
             }
-
-            deliver_publish(client, pdata, client->mqtt_state.message_length_read);
+            deliver_publish(client, (uint8_t *)pdata, client->mqtt_state.message_length_read);
             break;
           case MQTT_MSG_TYPE_PUBACK:
             if (client->mqtt_state.pending_msg_type == MQTT_MSG_TYPE_PUBLISH && client->mqtt_state.pending_msg_id == msg_id) {
@@ -414,6 +409,8 @@ READPACKET:
           }
 
         }
+        break;
+      default:
         break;
     }
   } else {
@@ -738,6 +735,8 @@ MQTT_Task(os_event_t *e)
         break;
       }
       break;
+    default:
+      break;
   }
 }
 
@@ -773,7 +772,6 @@ MQTT_InitConnection(MQTT_Client *mqttClient, uint8_t* host, uint32_t port, uint8
 BOOL ICACHE_FLASH_ATTR
 MQTT_InitClient(MQTT_Client *mqttClient, uint8_t* client_id, uint8_t* client_user, uint8_t* client_pass, uint32_t keepAliveTime, uint8_t cleanSession)
 {
-  uint32_t temp;
   INFO("MQTT:InitClient");
 
   os_memset(&mqttClient->connect_info, 0, sizeof(mqtt_connect_info_t));

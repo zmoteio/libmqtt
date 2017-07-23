@@ -16,13 +16,13 @@ $1/%.o: %.c
 	$(vecho) "CC $$<"
 	$(Q) $(CC) $(INCDIR) $(MODULE_INCDIR) $(EXTRA_INCDIR) $(SDK_INCDIR) $(CFLAGS)  -c $$< -o $$@
 endef
-CFLAGS += -Imqtt/include -I../user -I../include
+CFLAGS += -Imqtt/include -I../user -I../include -I../enc28j60 -Wswitch
 
 all: libmqtt.a
 
 OBJS = $(patsubst %.c,%.o,$(wildcard mqtt/*.c))
 libmqtt.a: $(OBJS)
-	$(vecho) ">>AR $@"
+	$(vecho) "AR $@"
 	$(Q) $(AR) cru $@ $^
 
 

@@ -96,7 +96,7 @@ uint8_t ICACHE_FLASH_ATTR UTILS_StrToIP(const int8_t* str, void *ip)
   /* A pointer to the next digit to process. */
   const char * start;
 
-  start = str;
+  start = (char *)str;
   for (i = 0; i < 4; i++) {
     /* The digit being processed. */
     char c;
