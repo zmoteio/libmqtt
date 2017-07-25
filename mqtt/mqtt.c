@@ -40,6 +40,7 @@
 #include "user_config.h"
 #include "mqtt.h"
 #include "mqueue.h"
+#include "utils.h"
 
 #include "debug.h"
 
@@ -751,7 +752,6 @@ MQTT_Task(os_event_t *e)
 void ICACHE_FLASH_ATTR
 MQTT_InitConnection(MQTT_Client *mqttClient, uint8_t* host, uint32_t port, uint8_t security)
 {
-  uint32_t temp;
   INFO("MQTT:InitConnection");
   os_memset(mqttClient, 0, sizeof(MQTT_Client));
   SAFE_STRCPY(mqttClient->host, host);
@@ -876,7 +876,7 @@ MQTT_Connect(MQTT_Client *mqttClient)
   }
   else {
     INFO("TCP: Connect to domain %s:%d", mqttClient->host, mqttClient->port);
-    espconn_gethostbyname(mqttClient->pCon, mqttClient->host, &mqttClient->ip, mqtt_dns_found);
+    espconn_gethostbyname(mqttClient->pCon, (char *)mqttClient->host, &mqttClient->ip, mqtt_dns_found);
   }
   mqttClient->connState = TCP_CONNECTING;
 }
