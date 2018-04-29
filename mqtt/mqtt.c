@@ -44,6 +44,8 @@
 
 #include "debug.h"
 
+#include "enc_redirect.h"
+
 #define MQTT_TASK_PRIO            2
 #define MQTT_TASK_QUEUE_SIZE      1
 #define MQTT_SEND_TIMOUT      5
@@ -676,12 +678,13 @@ MQTT_Task(os_event_t *e)
   if (e->par == 0)
     return;
   switch (client->connState) {
-
+    int isWired;
     case TCP_RECONNECT_REQ:
       break;
     case TCP_RECONNECT:
+      isWired = ESPCONN_IS_WIRED(client->pCon); // Somewhat of a hack, but...
       mqtt_tcpclient_delete(client);
-      MQTT_Connect(client);
+      MQTT_Connect(client, isWired);  
       INFO("TCP: Reconnect to: %s:%d", client->host, client->port);
       client->connState = TCP_CONNECTING;
       break;
@@ -830,7 +833,7 @@ MQTT_InitLWT(MQTT_Client *mqttClient, uint8_t* will_topic, uint8_t* will_msg, ui
   * @retval None
   */
 void ICACHE_FLASH_ATTR
-MQTT_Connect(MQTT_Client *mqttClient)
+MQTT_Connect(MQTT_Client *mqttClient, int isWired)
 {
   if (mqttClient->pCon) {
     // Clean up the old connection forcefully - using MQTT_Disconnect
@@ -840,7 +843,7 @@ MQTT_Connect(MQTT_Client *mqttClient)
   }
   //mqttClient->pCon = ZALLOC(sizeof(struct espconn));
   mqttClient->pCon = &(mqttClient->conn);
-  mqttClient->pCon->type = ESPCONN_TCP;
+  mqttClient->pCon->type = isWired?ESPCONN_MARK_WIRED(ESPCONN_TCP):ESPCONN_TCP;
   mqttClient->pCon->state = ESPCONN_NONE;
   //mqttClient->pCon->proto.tcp = ZALLOC(sizeof(esp_tcp));
   mqttClient->pCon->proto.tcp = &(mqttClient->tcp);
